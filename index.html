@@ -1,0 +1,1701 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>FareMap — rough flight routes demo</title>
+<style>
+  :root{
+    color-scheme: light;
+    --surface-1:#fcfcfb;
+    --page:#f9f9f7;
+    --text-primary:#0b0b0b;
+    --text-secondary:#52514e;
+    --text-muted:#898781;
+    --grid:#e1e0d9;
+    --baseline:#c3c2b7;
+    --border: rgba(11,11,11,0.10);
+    --good-bg: rgba(12,163,12,0.12);
+    --good-text:#006300;
+    --land:#cfc9b6;
+    --accent:#2a78d6;
+    --accent-ring: rgba(42,120,214,0.28);
+    --p0:#cde2fb; --p1:#9ec5f4; --p2:#5598e7; --p3:#2a78d6; --p4:#184f95;
+  }
+  /* Dark palette applies when the system prefers dark AND the user hasn't
+     explicitly overridden to light, OR when the user has explicitly
+     switched to dark regardless of system preference. */
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      color-scheme: dark;
+      --surface-1:#1a1a19;
+      --page:#0d0d0d;
+      --text-primary:#ffffff;
+      --text-secondary:#c3c2b7;
+      --text-muted:#898781;
+      --grid:#2c2c2a;
+      --baseline:#383835;
+      --border: rgba(255,255,255,0.10);
+      --good-bg: rgba(12,163,12,0.18);
+      --good-text:#0ca30c;
+      --land:#33332e;
+      --accent:#3987e5;
+      --accent-ring: rgba(57,135,229,0.32);
+      --p0:#86b6ef; --p1:#5598e7; --p2:#3987e5; --p3:#2a78d6; --p4:#1c5cab;
+    }
+  }
+  :root[data-theme="dark"]{
+    color-scheme: dark;
+    --surface-1:#1a1a19;
+    --page:#0d0d0d;
+    --text-primary:#ffffff;
+    --text-secondary:#c3c2b7;
+    --text-muted:#898781;
+    --grid:#2c2c2a;
+    --baseline:#383835;
+    --border: rgba(255,255,255,0.10);
+    --good-bg: rgba(12,163,12,0.18);
+    --good-text:#0ca30c;
+    --land:#33332e;
+    --accent:#3987e5;
+    --accent-ring: rgba(57,135,229,0.32);
+    --p0:#86b6ef; --p1:#5598e7; --p2:#3987e5; --p3:#2a78d6; --p4:#1c5cab;
+  }
+  *{ box-sizing:border-box; }
+  html,body{ height:100%; margin:0; }
+  body{
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background:var(--page);
+    color:var(--text-primary);
+    overflow:hidden;
+  }
+  .app{ display:flex; flex-direction:column; height:100vh; }
+
+  header.topbar{
+    display:flex; align-items:center; gap:12px;
+    padding:10px 16px;
+    background:var(--surface-1);
+    border-bottom:1px solid var(--border);
+    flex-wrap:wrap;
+    position:relative; z-index:41;
+  }
+  .brand{ display:flex; align-items:baseline; gap:8px; margin-right:4px; }
+  .brand-name{ font-weight:700; font-size:15px; letter-spacing:.1px; }
+  .badge-demo{
+    font-size:10.5px; font-weight:700; letter-spacing:.3px;
+    padding:2px 8px; border-radius:999px;
+    background:var(--grid); color:var(--text-secondary);
+    text-transform:uppercase;
+  }
+  .field-label{ font-size:11.5px; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:.3px; white-space:nowrap; }
+  .search-row{ display:flex; align-items:center; gap:8px; flex:1; min-width:220px; max-width:420px; }
+  .search-wrap{ position:relative; flex:1; }
+  .search-wrap svg.icon{ position:absolute; left:10px; top:50%; transform:translateY(-50%); width:14px; height:14px; color:var(--text-muted); pointer-events:none; }
+  input.city-input{
+    width:100%; padding:9px 12px 9px 30px; border-radius:8px;
+    border:1px solid var(--border); background:var(--page);
+    color:var(--text-primary); font-size:13.5px; outline:none;
+  }
+  input.city-input:focus{ border-color:var(--accent); }
+  #originInput{ padding-right:28px; }
+  .search-wrap .clear-btn{
+    position:absolute; right:6px; top:50%; transform:translateY(-50%);
+    width:18px; height:18px; border-radius:50%; border:none; padding:0;
+    background:var(--grid); color:var(--text-secondary); cursor:pointer;
+    font-size:10px; line-height:1; align-items:center; justify-content:center;
+    display:none;
+  }
+  .search-wrap .clear-btn.visible{ display:flex; }
+  .search-wrap .clear-btn:hover{ background:var(--accent); color:#fff; }
+  .dropdown{
+    position:absolute; top:calc(100% + 4px); left:0; right:0;
+    background:var(--surface-1); border:1px solid var(--border);
+    border-radius:10px; max-height:280px; overflow-y:auto;
+    box-shadow:0 10px 28px rgba(0,0,0,.18); z-index:50; display:none;
+  }
+  .dropdown.open{ display:block; }
+  .dropdown-item{
+    padding:8px 12px; cursor:pointer; font-size:13px;
+    display:flex; justify-content:space-between; gap:10px; color:var(--text-primary);
+  }
+  .dropdown-item .muted{ color:var(--text-muted); font-size:11.5px; }
+  .dropdown-item:hover, .dropdown-item.active{ background:var(--grid); }
+  .dropdown-empty{ padding:10px 12px; font-size:12.5px; color:var(--text-muted); }
+  .hint{ font-size:11.5px; color:var(--text-muted); margin-left:auto; white-space:nowrap; }
+  .theme-toggle{
+    width:30px; height:30px; border-radius:50%; flex:0 0 auto;
+    border:1px solid var(--border); background:var(--page);
+    color:var(--text-secondary); cursor:pointer; font-size:14px;
+    display:flex; align-items:center; justify-content:center; line-height:1;
+  }
+  .theme-toggle:hover{ border-color:var(--accent); color:var(--accent); }
+
+  .date-field{ position:relative; flex:0 0 auto; }
+  .date-toggle{
+    display:flex; align-items:center; gap:7px; padding:8px 12px;
+    border-radius:8px; border:1px solid var(--border); background:var(--page);
+    color:var(--text-primary); font-size:13px; cursor:pointer; white-space:nowrap;
+  }
+  .date-toggle:hover{ border-color:var(--accent); }
+  .date-toggle svg.icon{ width:14px; height:14px; color:var(--text-muted); flex:0 0 auto; }
+  .date-panel{
+    position:absolute; top:calc(100% + 6px); left:0;
+    background:var(--surface-1); border:1px solid var(--border);
+    border-radius:12px; padding:12px; width:250px;
+    box-shadow:0 10px 28px rgba(0,0,0,.18); z-index:55; display:none;
+  }
+  .date-panel.open{ display:block; }
+  .trip-switch{
+    display:flex; gap:4px; background:var(--page); border:1px solid var(--border);
+    border-radius:8px; padding:3px; margin-bottom:10px;
+  }
+  .trip-opt{
+    flex:1; padding:6px 0; border:none; background:none; border-radius:6px;
+    font-size:12px; font-weight:600; color:var(--text-secondary); cursor:pointer;
+  }
+  .trip-opt.active{ background:var(--accent); color:#fff; }
+  .cal-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; }
+  .cal-title{ font-size:12.5px; font-weight:700; }
+  .cal-nav{
+    width:22px; height:22px; border-radius:6px; border:1px solid var(--border);
+    background:var(--page); color:var(--text-secondary); cursor:pointer; font-size:13px; line-height:1;
+    display:flex; align-items:center; justify-content:center; padding:0;
+  }
+  .cal-nav:hover{ border-color:var(--accent); color:var(--accent); }
+  .cal-weekdays{ display:grid; grid-template-columns:repeat(7,1fr); text-align:center; font-size:10.5px; color:var(--text-muted); margin-bottom:2px; }
+  .cal-grid{ display:grid; grid-template-columns:repeat(7,1fr); gap:2px; }
+  .cal-day{
+    aspect-ratio:1; display:flex; align-items:center; justify-content:center;
+    font-size:12px; border-radius:6px; cursor:pointer; color:var(--text-primary);
+    border:none; background:none;
+  }
+  .cal-day:hover{ background:var(--grid); }
+  .cal-day.outside{ color:var(--text-muted); opacity:.4; }
+  .cal-day.past{ color:var(--text-muted); opacity:.3; cursor:default; pointer-events:none; }
+  .cal-day.today{ box-shadow:inset 0 0 0 1px var(--accent); }
+  .cal-day.selected{ background:var(--accent); color:#fff; font-weight:700; }
+  .cal-day.in-range{ background:var(--grid); }
+  .date-panel-footer{ display:flex; align-items:center; justify-content:space-between; margin-top:10px; gap:8px; }
+  .date-panel-footer button{
+    font-size:12px; color:var(--text-secondary); background:none; border:none;
+    cursor:pointer; text-decoration:underline; padding:2px; white-space:nowrap;
+  }
+  .date-panel-footer button:hover{ color:var(--text-primary); }
+  .date-note{ font-size:10.5px; line-height:1.3; color:var(--text-muted); text-align:right; }
+
+  .dest-row{
+    display:flex; align-items:flex-start; gap:10px;
+    padding:9px 16px; background:var(--page);
+    border-bottom:1px solid var(--border);
+    flex-wrap:wrap; position:relative; z-index:40;
+  }
+  .dest-row .search-wrap{ max-width:230px; flex:0 0 220px; }
+  .chips{
+    display:flex; flex-wrap:wrap; gap:6px; align-items:center; flex:1;
+    min-height:34px; padding-top:2px; overflow:hidden;
+    transition:max-height .22s ease;
+  }
+  .chips.collapsed{ max-height:32px; }
+  .fold-btn{
+    width:24px; height:24px; border-radius:6px; flex:0 0 auto;
+    border:1px solid var(--border); background:var(--page);
+    color:var(--text-secondary); cursor:pointer; font-size:11px; line-height:1;
+    display:flex; align-items:center; justify-content:center;
+    transition:transform .2s ease; margin-top:1px;
+  }
+  .fold-btn:hover{ border-color:var(--accent); color:var(--accent); }
+  .fold-btn.collapsed{ transform:rotate(180deg); }
+  .chip{
+    display:inline-flex; align-items:center; gap:6px;
+    background:var(--grid); color:var(--text-primary);
+    border-radius:999px; padding:5px 6px 5px 12px; font-size:12.5px; font-weight:600;
+  }
+  .chip .chip-price{ color:var(--text-muted); font-weight:500; }
+  .chip button{
+    width:18px; height:18px; border-radius:50%; border:none;
+    background:var(--surface-1); color:var(--text-secondary); cursor:pointer;
+    font-size:11px; line-height:1; display:flex; align-items:center; justify-content:center;
+  }
+  .chip button:hover{ background:var(--accent); color:#fff; }
+  .chips-empty{ font-size:12.5px; color:var(--text-muted); padding:7px 0; }
+  button#clearDestBtn, button#selectAllBtn{
+    font-size:12px; color:var(--text-secondary); background:none; border:none;
+    cursor:pointer; text-decoration:underline; padding:7px 2px; white-space:nowrap;
+  }
+  button#clearDestBtn:hover, button#selectAllBtn:hover{ color:var(--text-primary); }
+
+  main.mapwrap{ position:relative; flex:1; overflow:hidden; background:var(--page); }
+  #mapScroll{
+    position:absolute; inset:0; overflow:auto;
+    cursor:grab; -webkit-overflow-scrolling:touch;
+  }
+  #mapScroll.dragging{ cursor:grabbing; }
+  #mapScroll::-webkit-scrollbar{ height:8px; width:8px; }
+  #mapScroll::-webkit-scrollbar-thumb{ background:var(--border); border-radius:4px; }
+  svg#map{ display:block; touch-action:none; }
+  .citydot{ cursor:pointer; transition:fill .1s; }
+  .citydot:hover{ fill:var(--accent); }
+
+  .legend{
+    position:absolute; left:14px; bottom:14px;
+    background:var(--surface-1); border:1px solid var(--border);
+    border-radius:12px; padding:12px 14px; width:220px;
+    box-shadow:0 6px 20px rgba(0,0,0,.12); z-index:20; pointer-events:none;
+  }
+  .legend-title{ font-size:11.5px; font-weight:700; color:var(--text-secondary); margin-bottom:6px; }
+  .legend-bar{ height:8px; border-radius:4px; background:linear-gradient(to right, var(--p0), var(--p1), var(--p2), var(--p3), var(--p4)); }
+  .legend-bar.flat{ background:var(--p3); }
+  .legend-bar.empty{ background:var(--grid); }
+  .legend-labels{ display:flex; justify-content:space-between; margin-top:4px; font-size:11px; color:var(--text-muted); font-variant-numeric: tabular-nums; }
+  .disclaimer{ margin-top:8px; font-size:10.5px; line-height:1.35; color:var(--text-muted); }
+
+  .hint-bar{
+    position:absolute; left:50%; bottom:16px; transform:translateX(-50%);
+    background:var(--surface-1); border:1px solid var(--border);
+    color:var(--text-secondary); font-size:12.5px; padding:8px 16px;
+    border-radius:20px; box-shadow:0 6px 18px rgba(0,0,0,.12);
+    pointer-events:none; white-space:nowrap; z-index:15; max-width:90%;
+    overflow:hidden; text-overflow:ellipsis;
+  }
+
+  .map-controls{
+    position:absolute; right:14px; bottom:14px; z-index:20;
+    display:flex; flex-direction:column; gap:8px;
+  }
+  .map-ctrl-btn{
+    width:38px; height:38px; border-radius:50%;
+    background:var(--surface-1); border:1px solid var(--border);
+    color:var(--text-secondary); font-size:18px; font-weight:600; cursor:pointer;
+    box-shadow:0 6px 16px rgba(0,0,0,.14);
+    display:flex; align-items:center; justify-content:center; line-height:1; padding:0;
+  }
+  .map-ctrl-btn:hover{ color:var(--accent); border-color:var(--accent); }
+  .map-ctrl-btn:active{ transform:scale(0.94); }
+
+  .tooltip{
+    position:fixed; pointer-events:none; z-index:60;
+    background:var(--surface-1); border:1px solid var(--border);
+    border-radius:8px; padding:6px 10px; font-size:12px;
+    color:var(--text-primary); box-shadow:0 6px 18px rgba(0,0,0,.15);
+    transform:translate(-50%,-130%); white-space:nowrap; opacity:0; transition:opacity .1s;
+  }
+  .tooltip.show{ opacity:1; }
+  .tooltip .t-city{ font-weight:700; }
+  .tooltip .t-sub{ color:var(--text-muted); font-size:11px; }
+
+  .drawer{
+    position:fixed; top:0; right:0; height:100%; width:340px;
+    background:var(--surface-1); border-left:1px solid var(--border);
+    transform:translateX(100%); transition:transform .28s ease;
+    z-index:70; overflow-y:auto; padding:22px 20px;
+  }
+  .drawer.open{ transform:translateX(0); }
+  .drawer-close{
+    position:absolute; top:14px; right:14px; width:28px; height:28px;
+    border-radius:8px; border:1px solid var(--border); background:var(--page);
+    color:var(--text-secondary); cursor:pointer; font-size:14px; line-height:1;
+  }
+  .drawer h2{ font-size:18px; margin:0 0 2px 0; }
+  .drawer .sub{ font-size:12.5px; color:var(--text-muted); margin-bottom:16px; }
+  .drawer .stat-row{ display:flex; justify-content:space-between; font-size:12.5px; color:var(--text-secondary); padding:4px 0; border-bottom:1px dashed var(--grid); margin-bottom:10px; }
+  .fare-hint{ font-size:11px; color:var(--text-muted); margin:-6px 0 6px; }
+  .fare-list{ display:flex; flex-direction:column; }
+  .fare-row{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:11px 8px; border-bottom:1px solid var(--grid);
+    gap:8px; cursor:pointer; border-radius:8px; margin:0 -8px;
+  }
+  .fare-row:last-child{ border-bottom:none; }
+  .fare-row:hover{ background:var(--grid); }
+  .fare-row.active{ background:var(--accent-ring); }
+  .fare-left{ display:flex; flex-direction:column; gap:3px; }
+  .fare-airline{ font-size:13.5px; font-weight:600; }
+  .fare-meta{ font-size:11.5px; color:var(--text-muted); }
+  .fare-price{ font-size:15px; font-weight:700; font-variant-numeric: tabular-nums; }
+  .fare-badge{
+    display:inline-block; margin-left:6px; font-size:10px; font-weight:700;
+    padding:2px 6px; border-radius:6px; background:var(--good-bg); color:var(--good-text);
+    letter-spacing:.2px; vertical-align:middle;
+  }
+  .drawer-empty{ color:var(--text-muted); font-size:12.5px; }
+  .drawer-remove{
+    margin-top:18px; width:100%; padding:9px; border-radius:8px;
+    border:1px solid var(--border); background:var(--page); color:var(--text-secondary);
+    font-size:12.5px; font-weight:600; cursor:pointer;
+  }
+  .drawer-remove:hover{ border-color:var(--accent); color:var(--accent); }
+
+  @media (max-width: 680px){
+    .drawer{
+      width:100%; left:0; right:0; top:auto; bottom:0; height:72%;
+      border-left:none; border-top:1px solid var(--border);
+      border-radius:16px 16px 0 0; transform:translateY(100%);
+    }
+    .drawer.open{ transform:translateY(0); }
+    .hint{ display:none; }
+    .legend{ width:170px; padding:10px 12px; }
+    .dest-row .search-wrap{ flex:1 1 100%; max-width:none; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-name">FareMap</span>
+      <span class="badge-demo">Demo</span>
+    </div>
+    <span class="field-label">From</span>
+    <div class="search-row">
+      <div class="search-wrap">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input id="originInput" class="city-input" type="text" placeholder="Departure city…" autocomplete="off" />
+        <button id="originClearBtn" class="clear-btn" type="button" aria-label="Clear departure city" title="Clear">✕</button>
+        <div id="originDropdown" class="dropdown"></div>
+      </div>
+    </div>
+    <span class="field-label">Dates</span>
+    <div class="date-field">
+      <button id="dateToggleBtn" class="date-toggle" type="button">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        <span id="dateToggleLabel">Add dates</span>
+      </button>
+      <div id="datePanel" class="date-panel">
+        <div class="trip-switch">
+          <button type="button" class="trip-opt active" data-mode="oneway">One way</button>
+          <button type="button" class="trip-opt" data-mode="roundtrip">Round trip</button>
+        </div>
+        <div class="cal-head">
+          <button type="button" class="cal-nav" id="calPrevBtn" aria-label="Previous month">‹</button>
+          <span id="calTitle" class="cal-title"></span>
+          <button type="button" class="cal-nav" id="calNextBtn" aria-label="Next month">›</button>
+        </div>
+        <div class="cal-weekdays"><span>S</span><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span></div>
+        <div id="calGrid" class="cal-grid"></div>
+        <div class="date-panel-footer">
+          <button id="dateClearBtn" type="button">Clear</button>
+          <span class="date-note">Demo only — dates aren't applied to fares</span>
+        </div>
+      </div>
+    </div>
+    <span class="hint">Drag or scroll to pan (wraps around the globe) · Ctrl/⌘+scroll to zoom</span>
+    <button id="themeToggleBtn" class="theme-toggle" type="button" title="Toggle dark mode">🌙</button>
+  </header>
+
+  <div class="dest-row">
+    <span class="field-label" style="padding-top:9px;">To</span>
+    <div class="search-wrap">
+      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input id="destInput" class="city-input" type="text" placeholder="Add a destination…" autocomplete="off" />
+      <div id="destDropdown" class="dropdown"></div>
+    </div>
+    <div id="chips" class="chips"></div>
+    <button id="selectAllBtn" type="button">Select all</button>
+    <button id="clearDestBtn" type="button">Clear all</button>
+    <button id="chipsFoldBtn" class="fold-btn" type="button" title="Collapse destination list">▾</button>
+  </div>
+
+  <main class="mapwrap">
+    <div id="mapScroll">
+      <svg id="map">
+        <rect x="0" y="0" width="100%" height="500" fill="var(--page)"></rect>
+        <g id="land"></g>
+        <g id="citydots"></g>
+        <g id="routes"></g>
+        <g id="destmarkers"></g>
+        <g id="originmarker"></g>
+        <g id="labels"></g>
+        <g id="emptyhint"></g>
+      </svg>
+    </div>
+
+    <div class="legend">
+      <div class="legend-title">Best price found</div>
+      <div id="legendBar" class="legend-bar"></div>
+      <div class="legend-labels"><span id="legendMin">$–</span><span id="legendMax">$–</span></div>
+      <div class="disclaimer">Demo only — routes and fares are illustrative mock data, not live prices.</div>
+    </div>
+
+    <div class="map-controls">
+      <button id="zoomInBtn" class="map-ctrl-btn" title="Zoom in">+</button>
+      <button id="zoomOutBtn" class="map-ctrl-btn" title="Zoom out">−</button>
+      <button id="recenterBtn" class="map-ctrl-btn" title="Recenter on departure city">⌖</button>
+    </div>
+
+    <div id="hintBar" class="hint-bar" hidden></div>
+  </main>
+</div>
+
+<div id="tooltip" class="tooltip"></div>
+
+<div id="drawer" class="drawer">
+  <button class="drawer-close" id="drawerClose">✕</button>
+  <div id="drawerContent"><div class="drawer-empty">Select a destination to see example fares.</div></div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  // ---------- data ----------
+  var CITIES = [
+    { code:'JFK', name:'New York', country:'USA', lat:40.71, lon:-74.00 },
+    { code:'LAX', name:'Los Angeles', country:'USA', lat:34.05, lon:-118.24 },
+    { code:'ORD', name:'Chicago', country:'USA', lat:41.88, lon:-87.63 },
+    { code:'YYZ', name:'Toronto', country:'Canada', lat:43.65, lon:-79.38 },
+    { code:'MEX', name:'Mexico City', country:'Mexico', lat:19.43, lon:-99.13 },
+    { code:'GRU', name:'São Paulo', country:'Brazil', lat:-23.55, lon:-46.63 },
+    { code:'EZE', name:'Buenos Aires', country:'Argentina', lat:-34.60, lon:-58.38 },
+    { code:'LHR', name:'London', country:'UK', lat:51.51, lon:-0.13 },
+    { code:'CDG', name:'Paris', country:'France', lat:48.85, lon:2.35 },
+    { code:'FRA', name:'Frankfurt', country:'Germany', lat:50.11, lon:8.68 },
+    { code:'MAD', name:'Madrid', country:'Spain', lat:40.42, lon:-3.70 },
+    { code:'FCO', name:'Rome', country:'Italy', lat:41.90, lon:12.50 },
+    { code:'IST', name:'Istanbul', country:'Türkiye', lat:41.01, lon:28.98 },
+    { code:'SVO', name:'Moscow', country:'Russia', lat:55.76, lon:37.62 },
+    { code:'DXB', name:'Dubai', country:'UAE', lat:25.20, lon:55.27 },
+    { code:'CAI', name:'Cairo', country:'Egypt', lat:30.04, lon:31.24 },
+    { code:'JNB', name:'Johannesburg', country:'South Africa', lat:-26.20, lon:28.05 },
+    { code:'NBO', name:'Nairobi', country:'Kenya', lat:-1.29, lon:36.82 },
+    { code:'DEL', name:'Delhi', country:'India', lat:28.61, lon:77.21 },
+    { code:'BOM', name:'Mumbai', country:'India', lat:19.08, lon:72.88 },
+    { code:'BKK', name:'Bangkok', country:'Thailand', lat:13.76, lon:100.50 },
+    { code:'SIN', name:'Singapore', country:'Singapore', lat:1.35, lon:103.82 },
+    { code:'HKG', name:'Hong Kong', country:'China', lat:22.32, lon:114.17 },
+    { code:'PVG', name:'Shanghai', country:'China', lat:31.23, lon:121.47 },
+    { code:'PEK', name:'Beijing', country:'China', lat:39.90, lon:116.41 },
+    { code:'HND', name:'Tokyo', country:'Japan', lat:35.68, lon:139.65 },
+    { code:'ICN', name:'Seoul', country:'South Korea', lat:37.57, lon:126.98 },
+    { code:'SYD', name:'Sydney', country:'Australia', lat:-33.87, lon:151.21 },
+    { code:'MEL', name:'Melbourne', country:'Australia', lat:-37.81, lon:144.96 },
+    { code:'AKL', name:'Auckland', country:'New Zealand', lat:-36.85, lon:174.76 },
+    { code:'BNE', name:'Brisbane', country:'Australia', lat:-27.47, lon:153.03 },
+    { code:'PER', name:'Perth', country:'Australia', lat:-31.95, lon:115.86 },
+    { code:'YVR', name:'Vancouver', country:'Canada', lat:49.28, lon:-123.12 },
+    { code:'POM', name:'Port Moresby', country:'Papua New Guinea', lat:-9.48, lon:147.15 },
+    { code:'TPE', name:'Taipei', country:'Taiwan', lat:25.03, lon:121.56 },
+    { code:'LOS', name:'Lagos', country:'Nigeria', lat:6.52, lon:3.38 },
+    { code:'SFO', name:'San Francisco', country:'USA', lat:37.77, lon:-122.42 },
+    { code:'KIX', name:'Osaka', country:'Japan', lat:34.69, lon:135.50 },
+    { code:'MNL', name:'Manila', country:'Philippines', lat:14.60, lon:120.98 },
+    { code:'CGK', name:'Jakarta', country:'Indonesia', lat:-6.21, lon:106.85 },
+    { code:'SCL', name:'Santiago', country:'Chile', lat:-33.45, lon:-70.67 }
+  ];
+  var AIRLINES = ['Skyline Air','Horizon Airways','Pacific Wings','Nimbus Air','Northern Star','Coral Airways','Meridian Air','Solara Airlines'];
+
+  // Hand-authored, simplified continent/island outlines (approximate, drawn
+  // from general geographic knowledge -- NOT surveyed GIS coastline data;
+  // this sandbox has no network access to fetch a real coastline dataset).
+  // Each entry is one simple polygon ring as a flat [lon, lat, lon, lat, ...]
+  // array, walked once around the perimeter (no self-crossing). Peninsulas
+  // that are hard to weave cleanly into a big mainland ring (Iberia, Italy,
+  // Korea, India, Arabia, Indochina/Malaya) are kept as small standalone
+  // polygons that simply overlap the mainland edge -- invisible once both
+  // are filled the same solid color.
+  var LAND_SHAPES = [
+
+  // ---- North America ----
+  [
+   -168,66, -155,71, -140,70, -120,69, -100,68, -85,63, -78,58, -70,55,
+   -63,50, -55,47, -60,45, -66,44, -70,42, -74,40, -76,36, -80,33, -81,26,
+   -82,25, -83,29, -89,30, -94,29.5, -97,26,
+   -97,21, -93,16, -88,13, -84,10, -79,8,
+   -84,9, -92,15, -99,17, -106,23, -110,24,
+   -115,28, -117,32, -122,37, -124,42, -124,48,
+   -128,50, -132,54, -138,58, -145,60, -155,59, -162,55,
+   -168,60, -168,66
+  ],
+
+  // ---- Greenland ----
+  [
+   -46,60.5, -43,60, -40,61.5, -35,64, -25,65, -22,68, -20,70, -22,73,
+   -20,76, -25,78, -35,80, -45,81.3, -55,81, -62,80, -66,77, -68,74,
+   -66,71, -62,68, -58,65, -53,62.5, -48,61, -46,60.5
+  ],
+
+  // ---- South America ----
+  [
+   -77,8, -70,10, -60,8, -52,5, -48,-1, -42,-3, -37,-7, -35,-9, -35,-11,
+   -39,-17, -41,-23, -46,-24, -49,-28, -53,-34, -58,-38, -65,-43, -68,-49,
+   -70,-54, -69,-55.7,
+   -72,-54, -74,-48, -73,-44, -71.7,-33, -70,-27, -70.5,-20, -72,-16, -77,-11,
+   -80,-5, -78,0, -77,4, -77,8
+  ],
+
+  // ---- Eurasia mainland (Europe + Russia/Siberia + China + mainland SE
+  // Asia, simplified; India/Arabia/Indochina/Korea/Iberia/Italy are added
+  // as separate small overlapping peninsula shapes below) ----
+  [
+   -2,43, 3,42, 7,44, 9,45, 5,50, 2,51, 4,52, 8,54, 11,55, 13,57, 11,58,
+   10,60, 6,61, 10,65, 16,68, 21,70, 28,70, 35,66, 42,66, 50,68, 60,70,
+   70,72, 80,73, 90,74, 100,74, 110,73, 120,72, 130,72, 140,73, 155,73,
+   170,68, 179,66,
+   170,60, 163,58, 156,60, 150,59, 140,53, 135,48, 128,40, 122,34, 120,25,
+   112,20, 108,12, 100,8, 95,15, 90,22, 80,20, 68,24, 58,26, 50,28, 45,30,
+   38,32, 34,36, 28,37, 23,39, 20,40, 19,42, 18,43, 16,44, 13,45, 10,44,
+   7,44, 3,42, -2,43
+  ],
+
+  // ---- Iberian peninsula ----
+  [ -9,43, -9,39, -7,37, -3,36, 0,38, 3,42, -2,43, -9,43 ],
+
+  // ---- Italy ----
+  [ 7,44, 9,44, 12,44, 14,42, 18,40, 16,38, 13,38, 12,41, 9,43, 7,44 ],
+
+  // ---- Korea ----
+  [ 124,40, 126,39, 129,35, 129,37, 127,39, 124,40 ],
+
+  // ---- India ----
+  [ 68,24, 72,22, 73,15, 77,8, 80,13, 82,17, 87,21, 80,22, 76,24, 70,24, 68,24 ],
+
+  // ---- Arabian peninsula ----
+  [ 35,32, 43,30, 48,29, 50,24, 54,20, 56,18, 52,15, 45,13, 43,13, 38,15, 35,25, 35,32 ],
+
+  // ---- Indochina / Malay peninsula ----
+  [ 98,20, 105,20, 109,12, 106,10, 103,13, 100,13, 99,7, 101,3, 104,-1, 103,-3, 100,0, 98,8, 96,15, 98,20 ],
+
+  // ---- UK ----
+  [
+   -5,58.6, -3,58.6, -2,57.7, -2,56, -1.5,54.5, -0.3,53.6, 1.7,52.6,
+   1.3,51.9, 0.2,50.8, -1,50.6, -3,50.4, -5,50, -5.7,50, -4.5,51, -3.5,51.4,
+   -4.7,52.9, -3.1,53.4, -3.6,54.9, -5,55, -5.6,54.5, -6,54.4,
+   -5.4,55.2, -5.9,56.8, -5.3,57.3, -6,57.7, -5,58.6
+  ],
+
+  // ---- Ireland ----
+  [ -8.4,51.5, -9.7,51.6, -9.9,52.2, -8.9,52.5, -10.2,53.4, -9.1,53.9, -7.3,55.1, -6.5,54.6, -6,53.5, -6.3,52.5, -8.4,51.5 ],
+
+  // ---- Africa ----
+  [
+   -6,35, 10,37, 20,33, 25,32, 32,31, 35,29, 34,27, 37,22, 39,18, 43,12,
+   45,11, 48,10, 51,12, 51,10, 49,5, 44,2, 41,-1, 40,-4, 40,-10, 40,-15,
+   35,-20, 33,-26, 28,-33, 20,-35, 18,-34, 15,-27, 12,-18, 13,-10, 13,-5,
+   9,-2, 9,2, 6,4, 3,2, -1,1, -3,5, -5,5, -8,5, -11,7, -14,10, -16,13,
+   -17,15, -16,17, -17,21, -13,26, -9,32, -6,35
+  ],
+
+  // ---- Madagascar ----
+  [
+   43.2,-11.9, 44.5,-13, 47.1,-14.6, 49.9,-15.4, 50.2,-16.2, 49.4,-18,
+   47.9,-22.4, 46.3,-24.9, 45,-25.6, 43.8,-24.9, 43.5,-22, 44.3,-20.3,
+   43.9,-18.9, 44.1,-17, 43.3,-16, 44.4,-15.2, 43.2,-11.9
+  ],
+
+  // ---- Indonesia / Philippines / Malay archipelago (island clusters) ----
+  [ 95.3,5.5, 97,4.5, 99,2, 101,0, 104,-3, 102,-2, 100,0, 98,3, 95.3,5.5 ],
+  [ 105.3,-5.9, 108,-6.5, 111,-7, 113.5,-7.8, 112,-8.4, 108.5,-6.8, 105.3,-5.9 ],
+  [ 109,4.3, 113,2, 117.2,0.8, 117.5,-1, 114.5,-4, 111,-2, 109,1, 109,4.3 ],
+  [ 119,0.5, 123,-1, 123.5,1, 120,0.7, 119,0.5 ],
+  [ 120,10, 121.5,12.7, 123.5,13.5, 125,12.5, 125,9, 122,6.5, 121,7, 120,8, 120,10 ],
+  [ 130.9,-0.9, 138,-4.5, 141,-9, 148,-9.5, 144,-6, 138,-1, 132,-0.5, 130.9,-0.9 ],
+
+  // ---- Japan ----
+  [ 130,31, 130.7,33, 133.5,34, 136.9,34.6, 139.8,35.2, 140.9,38.3,
+    141.9,39.3, 141.4,40.5, 140,41.4, 139.9,38.2, 137,36.7, 136.7,37.3,
+    135.5,35.6, 132,35.4, 129.5,33.2, 130,31 ],
+  [ 141.9,42.5, 140,43, 141.4,45.5, 143.5,44.3, 145.5,43.4, 142.5,41.5, 141.9,42.5 ],
+
+  // ---- Australia ----
+  [
+   113.2,-22, 113.7,-25.5, 115.1,-33.6, 117.9,-35, 121.9,-33.9, 126,-31.9,
+   131.4,-31.5, 134.3,-33, 137.8,-35.2, 137.5,-33, 139.5,-35.9, 143.5,-38.4,
+   146.5,-38.8, 150,-35, 151.3,-33.9, 153.6,-28.9, 152.5,-24.7, 149.2,-21,
+   146.2,-19.2, 145.4,-16.9, 143.5,-14, 141.9,-11.9, 141.5,-13.8, 137,-15.9,
+   135.9,-14.9, 132.9,-11.4, 131.9,-11.3, 130.2,-12.4, 128,-14.9, 126.1,-16,
+   122.2,-18, 119.9,-19.9, 117.2,-20.5, 114.6,-21.8, 113.2,-22
+  ],
+
+  // ---- New Zealand ----
+  [ 172.6,-34.4, 174.3,-35, 175.8,-37, 178.5,-37.6, 176.9,-40, 174.7,-41.3,
+    173.9,-40.9, 172.9,-39.2, 174.7,-38, 174.5,-36.4, 172.6,-34.4 ],
+  [ 166.5,-45.8, 169.3,-46.6, 171.2,-44.2, 173.3,-41.8, 172,-40.5,
+    171,-42.4, 168.4,-44.1, 166.5,-45.8 ],
+
+  // ---- Antarctica (simplified broad band) ----
+  [
+   -180,-63, -150,-66, -120,-70, -90,-73, -60,-75, -30,-72, 0,-69, 30,-67,
+   60,-66, 90,-65, 120,-66, 150,-65, 180,-63, 180,-90, -180,-90, -180,-63
+  ]
+
+  ];
+
+  // World tiling: the map is drawn as TILE_COUNT side-by-side copies of the
+  // same 1000x500 world so it can be panned/scrolled infinitely east-west.
+  // The selected origin is always (re)placed in the middle copy (ORIGIN_TILE),
+  // and every route is drawn toward whichever copy of the destination is
+  // closest — i.e. the shorter way around the globe.
+  var TILE_W = 1000, TILE_H = 500, TILE_COUNT = 5, ORIGIN_TILE = 2;
+  // Zoom is a multiplier on top of the baseline "whole world fills the
+  // viewport height" scale. 1 = fully zoomed out (the floor); higher zooms
+  // in. Auto-fit picks a value so the widest selected route spans roughly
+  // 70% of the viewport width.
+  var MIN_ZOOM = 1, MAX_ZOOM = 40, FIT_FRACTION = 0.7;
+  // Fixed on-screen margins reserved when auto-fitting, so destination/origin
+  // label pills (a constant pixel size regardless of zoom) and the floating
+  // legend + zoom-control overlays never end up clipping or covering the
+  // just-fitted route.
+  var FIT_LABEL_MARGIN_PX = 70;
+  var FIT_BOTTOM_SAFE_PX = 140;
+  var zoom = 1;
+
+  function cityByCode(code){ return CITIES.find(function(c){ return c.code === code; }); }
+
+  // ---------- math helpers ----------
+  function mulberry32(a){
+    return function(){
+      a |= 0; a = (a + 0x6D2B79F5) | 0;
+      var t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  function seedFromString(s){
+    var h = 1779033703 ^ s.length;
+    for (var i = 0; i < s.length; i++){
+      h = Math.imul(h ^ s.charCodeAt(i), 3432918353);
+      h = (h << 13) | (h >>> 19);
+    }
+    return h >>> 0;
+  }
+  function haversineKm(lat1, lon1, lat2, lon2){
+    var R = 6371;
+    var dLat = (lat2 - lat1) * Math.PI / 180;
+    var dLon = (lon2 - lon1) * Math.PI / 180;
+    var a = Math.sin(dLat/2)*Math.sin(dLat/2) +
+            Math.cos(lat1*Math.PI/180) * Math.cos(lat2*Math.PI/180) *
+            Math.sin(dLon/2)*Math.sin(dLon/2);
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  }
+  // Base projection within a single 1000x500 world copy (tile 0).
+  function project(lat, lon){
+    var x = (lon + 180) / 360 * TILE_W;
+    var y = (90 - lat) / 180 * TILE_H;
+    return [x, y];
+  }
+  // Same, offset into a specific horizontal world copy.
+  function projectTiled(lat, lon, tileIndex){
+    var p = project(lat, lon);
+    return [p[0] + tileIndex * TILE_W, p[1]];
+  }
+  // Shortest signed longitude delta from `fromLon` to `toLon`, in (-180, 180].
+  // Positive = shorter going east; negative = shorter going west.
+  function shortestDeltaLon(fromLon, toLon){
+    var d = toLon - fromLon;
+    return ((d + 180) % 360 + 360) % 360 - 180;
+  }
+
+  function routeModel(origin, dest){
+    // Real-world distance/price always uses the true shortest great-circle
+    // distance, independent of which visual direction the arc is drawn.
+    var distanceKm = haversineKm(origin.lat, origin.lon, dest.lat, dest.lon);
+    var seed = seedFromString([origin.code, dest.code].sort().join('-'));
+    var rand = mulberry32(seed);
+    var jitter = (rand() - 0.5) * 0.3;
+    var basePrice = (45 + distanceKm * 0.085) * (1 + jitter);
+    var dotPrice = Math.max(29, Math.round((basePrice * 0.8) / 5) * 5);
+    var baseDurationH = distanceKm / 780 + 0.75;
+
+    var specs = [
+      { stops:0, priceMult:1.18, durAdd:0 },
+      { stops:1, priceMult:0.92, durAdd:1.5 + rand() },
+      { stops:1, priceMult:0.80, durAdd:3.0 + rand() }
+    ];
+    var opts = specs.map(function(o){
+      return {
+        airline: AIRLINES[Math.floor(rand() * AIRLINES.length)],
+        stops: o.stops,
+        price: Math.max(29, Math.round((basePrice * o.priceMult) / 5) * 5),
+        durationH: Math.round((baseDurationH + o.durAdd) * 10) / 10
+      };
+    });
+    opts.sort(function(a,b){ return a.price - b.price; });
+    return { distanceKm: Math.round(distanceKm), dotPrice: dotPrice, opts: opts };
+  }
+
+  function fmtDuration(h){
+    var hh = Math.floor(h);
+    var mm = Math.round((h - hh) * 60);
+    if (mm === 60){ hh += 1; mm = 0; }
+    return hh + 'h ' + (mm < 10 ? '0' : '') + mm + 'm';
+  }
+
+  // ---------- svg helpers ----------
+  var SVGNS = 'http://www.w3.org/2000/svg';
+  function el(tag, attrs){
+    var e = document.createElementNS(SVGNS, tag);
+    for (var k in attrs){ e.setAttribute(k, attrs[k]); }
+    return e;
+  }
+  function css(varName){
+    return getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
+  }
+  function priceColor(t){
+    var steps = [css('--p0'), css('--p1'), css('--p2'), css('--p3'), css('--p4')];
+    var idx = Math.round(Math.max(0, Math.min(1, t)) * (steps.length - 1));
+    return steps[idx];
+  }
+  function arcPath(x1,y1,x2,y2){
+    var mx = (x1+x2)/2, my = (y1+y2)/2;
+    var dist = Math.hypot(x2-x1, y2-y1);
+    var bow = Math.min(dist * 0.16, 70);
+    return 'M ' + x1 + ' ' + y1 + ' Q ' + mx + ' ' + (my - bow) + ' ' + x2 + ' ' + y2;
+  }
+  function clear(g){ while (g.firstChild) g.removeChild(g.firstChild); }
+
+  // ---------- svg + scroll container sizing ----------
+  var mapWrap = document.querySelector('main.mapwrap');
+  var mapScroll = document.getElementById('mapScroll');
+  var svg = document.getElementById('map');
+  svg.setAttribute('viewBox', '0 0 ' + (TILE_COUNT * TILE_W) + ' ' + TILE_H);
+
+  // The unzoomed baseline scale (whole world height fills the container).
+  function baseUnit(){ return (mapWrap.clientHeight || 500) / TILE_H; }
+  function pxPerUnit(){ return baseUnit() * zoom; }
+  // Dots, markers, strokes and label offsets are authored in logical units
+  // tuned for zoom=1 (unzoomed world view). Dividing by the current zoom
+  // keeps their ON-SCREEN pixel size constant as the user zooms in/out --
+  // otherwise a deep auto-zoom on a short flight would blow every dot up
+  // into a giant blob instead of just spacing things out. zs() = "zoom-scaled".
+  function zs(v){ return v / zoom; }
+  function layoutMap(){
+    var ppu = pxPerUnit();
+    svg.style.height = (TILE_H * ppu) + 'px';
+    svg.style.width = (TILE_COUNT * TILE_W * ppu) + 'px';
+  }
+
+  // ---------- static map chrome (drawn once, tiled across all copies) ----------
+  var landG = document.getElementById('land');
+  var cityDotsG = document.getElementById('citydots');
+  var emptyHintG = document.getElementById('emptyhint');
+  var hintBar = document.getElementById('hintBar');
+
+  (function drawLand(){
+    // Each LAND_SHAPES ring becomes one filled <path>, tiled across every
+    // world copy. Solid shapes (rather than the old dot-texture) so land
+    // reads as real coastline outlines instead of a stipple.
+    var frag = document.createDocumentFragment();
+    for (var tileIndex = 0; tileIndex < TILE_COUNT; tileIndex++){
+      LAND_SHAPES.forEach(function(ring){
+        var d = '';
+        for (var i = 0; i < ring.length; i += 2){
+          var p = projectTiled(ring[i+1], ring[i], tileIndex);
+          d += (i === 0 ? 'M' : 'L') + p[0] + ' ' + p[1] + ' ';
+        }
+        d += 'Z';
+        frag.appendChild(el('path', { d:d, fill:'var(--land)', stroke:'var(--land)', 'stroke-width':0.4, 'stroke-linejoin':'round' }));
+      });
+    }
+    landG.appendChild(frag);
+  })();
+
+  // City base dots are drawn once per world copy; clicking an unselected,
+  // non-origin dot adds it as a destination (wired up further below).
+  var cityDotEls = {};
+  var cityLabelEls = [];
+  (function drawCityDots(){
+    var frag = document.createDocumentFragment();
+    CITIES.forEach(function(c){ cityDotEls[c.code] = []; });
+    for (var tileIndex = 0; tileIndex < TILE_COUNT; tileIndex++){
+      CITIES.forEach(function(c){
+        var p = projectTiled(c.lat, c.lon, tileIndex);
+        var dot = el('circle', { cx:p[0], cy:p[1], r:zs(2.4), fill:'var(--text-muted)', class:'citydot', 'data-code':c.code });
+        var label = el('text', { x:p[0] + zs(4), y:p[1] + zs(3), 'font-size':zs(7.5), fill:'var(--text-muted)', opacity:0.85 });
+        label.textContent = c.name;
+        frag.appendChild(dot);
+        frag.appendChild(label);
+        cityDotEls[c.code].push(dot);
+        cityLabelEls.push({ el:label, p:p });
+      });
+    }
+    cityDotsG.appendChild(frag);
+  })();
+
+  // Re-apply zoom-scaled sizes to the once-drawn static chrome (city
+  // dots/labels) whenever the zoom level changes -- their positions never
+  // change, only how big they render at the current zoom. Land shapes are
+  // plain SVG-unit paths, so they scale naturally with the viewBox zoom and
+  // need no per-zoom rescaling here.
+  function updateStaticSizes(){
+    Object.keys(cityDotEls).forEach(function(code){
+      cityDotEls[code].forEach(function(dot){ dot.setAttribute('r', zs(2.4)); });
+    });
+    cityLabelEls.forEach(function(item){
+      item.el.setAttribute('x', item.p[0] + zs(4));
+      item.el.setAttribute('y', item.p[1] + zs(3));
+      item.el.setAttribute('font-size', zs(7.5));
+    });
+  }
+
+  // ---------- interactive layers ----------
+  var routesG = document.getElementById('routes');
+  var destG = document.getElementById('destmarkers');
+  var originG = document.getElementById('originmarker');
+  var labelsG = document.getElementById('labels');
+  var tooltip = document.getElementById('tooltip');
+  var drawer = document.getElementById('drawer');
+  var drawerContent = document.getElementById('drawerContent');
+  var legendEl = document.querySelector('.legend');
+  var legendBar = document.getElementById('legendBar');
+  var legendMin = document.getElementById('legendMin');
+  var legendMax = document.getElementById('legendMax');
+
+  function showTooltip(evt, html){
+    tooltip.innerHTML = html;
+    tooltip.style.left = evt.clientX + 'px';
+    tooltip.style.top = evt.clientY + 'px';
+    tooltip.classList.add('show');
+  }
+  function hideTooltip(){ tooltip.classList.remove('show'); }
+
+  function openDrawer(origin, dest, route){
+    hideTooltip();
+    focusedCode = dest.code;
+    focusedFareIndex = 0;
+    var rows = route.opts.map(function(o, i){
+      var badge = i === 0 ? '<span class="fare-badge">Best price</span>' : '';
+      return '' +
+        '<div class="fare-row' + (i === 0 ? ' active' : '') + '" data-index="' + i + '">' +
+          '<div class="fare-left">' +
+            '<div class="fare-airline">' + o.airline + badge + '</div>' +
+            '<div class="fare-meta">' + (o.stops === 0 ? 'Nonstop' : o.stops + ' stop') + ' · ' + fmtDuration(o.durationH) + '</div>' +
+          '</div>' +
+          '<div class="fare-price">$' + o.price + '</div>' +
+        '</div>';
+    }).join('');
+    drawerContent.innerHTML =
+      '<h2>' + dest.name + ' <span style="color:var(--text-muted);font-weight:500;">(' + dest.code + ')</span></h2>' +
+      '<div class="sub">' + dest.country + '</div>' +
+      '<div class="stat-row"><span>From ' + origin.name + '</span><span>' + route.distanceKm.toLocaleString() + ' km</span></div>' +
+      '<div class="fare-hint">Tap a fare (or its route on the map) to compare</div>' +
+      '<div class="fare-list">' + rows + '</div>' +
+      '<button class="drawer-remove" id="drawerRemoveBtn">Remove from comparison</button>';
+    drawer.classList.add('open');
+    drawerContent.querySelectorAll('.fare-row').forEach(function(row){
+      row.addEventListener('click', function(){
+        selectFare(parseInt(row.getAttribute('data-index'), 10));
+      });
+    });
+    document.getElementById('drawerRemoveBtn').addEventListener('click', function(){
+      removeDestination(dest.code);
+    });
+    renderRoutes();
+  }
+  function closeDrawer(){
+    hideTooltip();
+    drawer.classList.remove('open');
+    if (focusedCode){
+      focusedCode = null;
+      focusedFareIndex = 0;
+      renderRoutes();
+    }
+  }
+  // Selecting a fare (from the drawer list or by clicking its route on the
+  // map) re-renders the focused view with that option highlighted and the
+  // rest dimmed; it doesn't touch which destination is focused.
+  function selectFare(i){
+    focusedFareIndex = i;
+    renderRoutes();
+    drawerContent.querySelectorAll('.fare-row').forEach(function(row, idx){
+      row.classList.toggle('active', idx === i);
+    });
+  }
+  document.getElementById('drawerClose').addEventListener('click', closeDrawer);
+
+  // ---------- app state ----------
+  var originCode = 'LHR';
+  var destinations = ['JFK', 'SIN', 'SYD', 'DXB'];
+  // Set while the fare drawer is open: narrows the map to just that one
+  // route (plus its non-direct fare options, dimmed) instead of the full
+  // comparison overview. Cleared when the drawer closes.
+  var focusedCode = null;
+  var focusedFareIndex = 0;
+
+  function renderRoutes(){
+    // Clear every dynamic layer up front (not after the origin check) so a
+    // cleared/invalid origin actually wipes the old route/marker instead of
+    // leaving it stuck on screen.
+    clear(routesG); clear(destG); clear(originG); clear(labelsG); clear(emptyHintG);
+
+    var origin = cityByCode(originCode);
+
+    if (!origin){
+      // No departure city selected: de-highlight every base city dot back
+      // to its plain, unselected look and prompt for a departure city.
+      Object.keys(cityDotEls).forEach(function(code){
+        cityDotEls[code].forEach(function(dot){ dot.setAttribute('opacity', 0.7); });
+      });
+      legendEl.hidden = true;
+      hintBar.textContent = 'Search or click a city on the map to set your departure city';
+      hintBar.hidden = false;
+      return;
+    }
+
+    // reflect selection state on the always-visible base dots (every tile copy)
+    Object.keys(cityDotEls).forEach(function(code){
+      var sel = destinations.indexOf(code) !== -1 || code === originCode;
+      cityDotEls[code].forEach(function(dot){ dot.setAttribute('opacity', sel ? 0 : 0.7); });
+    });
+
+    // Origin always lives in the middle world copy; everything else is
+    // positioned relative to it via the shortest wrap-around direction.
+    var op = projectTiled(origin.lat, origin.lon, ORIGIN_TILE);
+
+    if (destinations.length === 0){
+      legendEl.hidden = true;
+      hintBar.textContent = 'Search or click a city to add a destination';
+      hintBar.hidden = false;
+      drawOrigin(origin, op);
+      return;
+    }
+    legendEl.hidden = false;
+    hintBar.hidden = true;
+
+    // Fare drawer open for one of the selected destinations: show only that
+    // route (overview resumes once the drawer closes).
+    if (focusedCode && destinations.indexOf(focusedCode) !== -1){
+      renderFocusedDestination(origin, op);
+      return;
+    }
+
+    var results = destinations.map(function(code){
+      var c = cityByCode(code);
+      if (!c) return null;
+      var dLon = shortestDeltaLon(origin.lon, c.lon);
+      var pos = [op[0] + dLon / 360 * TILE_W, project(c.lat, c.lon)[1]];
+      return { city:c, route:routeModel(origin, c), pos:pos };
+    }).filter(Boolean);
+
+    var prices = results.map(function(r){ return r.route.dotPrice; });
+    var min = Math.min.apply(null, prices), max = Math.max.apply(null, prices);
+    if (min === max){
+      legendBar.className = 'legend-bar flat';
+      legendMin.textContent = '$' + min;
+      legendMax.textContent = '';
+    } else {
+      legendBar.className = 'legend-bar';
+      legendMin.textContent = '$' + min;
+      legendMax.textContent = '$' + max;
+    }
+
+    // Greedily label the cheapest destinations first, skipping any whose marker
+    // sits too close to the origin pill or an already-labeled marker (avoids
+    // overlapping text when two chosen destinations sit close together).
+    var sortedByPrice = results.slice().sort(function(a,b){ return a.route.dotPrice - b.route.dotPrice; });
+    var labelCodes = {};
+    var placedPoints = [{ x: op[0], y: op[1], min: 58 }];
+    sortedByPrice.forEach(function(r){
+      var tooClose = placedPoints.some(function(pt){
+        var d = Math.hypot(r.pos[0]-pt.x, r.pos[1]-pt.y);
+        return d < (pt.min || 40);
+      });
+      if (tooClose) return;
+      labelCodes[r.city.code] = true;
+      placedPoints.push({ x:r.pos[0], y:r.pos[1], min:40 });
+    });
+
+    results.forEach(function(r){
+      var c = r.city, route = r.route, p = r.pos;
+      var t = max > min ? (route.dotPrice - min) / (max - min) : 0.5;
+      var color = priceColor(t);
+
+      var path = el('path', {
+        d: arcPath(op[0], op[1], p[0], p[1]),
+        fill:'none', stroke:'var(--text-secondary)', 'stroke-width':zs(1.3), 'stroke-opacity':0.4
+      });
+      routesG.appendChild(path);
+
+      var dot = el('circle', { cx:p[0], cy:p[1], r:zs(6.5), fill:color, stroke:'var(--surface-1)', 'stroke-width':zs(1.5), style:'cursor:pointer' });
+      destG.appendChild(dot);
+
+      function onEnter(evt){
+        path.setAttribute('stroke-opacity', 0.9);
+        path.setAttribute('stroke-width', zs(2));
+        showTooltip(evt, '<div class="t-city">' + c.name + '</div><div class="t-sub">from $' + route.dotPrice + ' · ' + route.distanceKm.toLocaleString() + ' km · click to view fares</div>');
+      }
+      function onMove(evt){ showTooltip(evt, tooltip.innerHTML); }
+      function onLeave(){
+        path.setAttribute('stroke-opacity', 0.4);
+        path.setAttribute('stroke-width', zs(1.3));
+        hideTooltip();
+      }
+      function onClick(){ openDrawer(origin, c, route); }
+      dot.addEventListener('mouseenter', onEnter);
+      dot.addEventListener('mousemove', onMove);
+      dot.addEventListener('mouseleave', onLeave);
+      dot.addEventListener('click', function(){ if (!wasDragged()) onClick(); });
+
+      if (labelCodes[c.code]){
+        var g = el('g', { style:'cursor:pointer' });
+        var ly = p[1] - zs(11);
+        var text = c.name + ' · $' + route.dotPrice;
+        var w = zs(8 + text.length * 4.6);
+        var bg = el('rect', { x:p[0] - w/2, y:ly - zs(10), width:w, height:zs(15), rx:zs(7), fill:'var(--surface-1)', stroke:'var(--border)', 'stroke-width':zs(1) });
+        var lbl = el('text', { x:p[0], y:ly + zs(1), 'text-anchor':'middle', 'font-size':zs(9.5), 'font-weight':600, fill:'var(--text-primary)' });
+        lbl.textContent = text;
+        g.appendChild(bg); g.appendChild(lbl);
+        g.addEventListener('click', function(){ if (!wasDragged()) onClick(); });
+        g.addEventListener('mouseenter', onEnter);
+        g.addEventListener('mousemove', onMove);
+        g.addEventListener('mouseleave', onLeave);
+        labelsG.appendChild(g);
+      }
+    });
+
+    drawOrigin(origin, op);
+  }
+
+  // ---------- focused single-destination view (fare drawer open) ----------
+  // Deterministic "via" bend point for a non-direct fare option, so the same
+  // route always draws the same plausible connection shape rather than a
+  // fresh random one on every re-render.
+  function connectionWaypoint(op, pos, seedBase, idx){
+    var rand = mulberry32(seedBase + idx * 97);
+    var dx = pos[0] - op[0], dy = pos[1] - op[1];
+    var len = Math.hypot(dx, dy) || 1;
+    var px = -dy / len, py = dx / len;
+    var side = idx % 2 === 0 ? 1 : -1;
+    var t = 0.35 + rand() * 0.3;
+    var wx = op[0] + dx * t, wy = op[1] + dy * t;
+    var offset = len * (0.10 + rand() * 0.10);
+    return [wx + px * offset * side, wy + py * offset * side];
+  }
+
+  function renderFocusedDestination(origin, op){
+    legendEl.hidden = true;
+    var dest = cityByCode(focusedCode);
+    if (!dest){
+      focusedCode = null;
+      drawOrigin(origin, op);
+      return;
+    }
+    var dLon = shortestDeltaLon(origin.lon, dest.lon);
+    var pos = [op[0] + dLon / 360 * TILE_W, project(dest.lat, dest.lon)[1]];
+    var route = routeModel(origin, dest);
+    if (focusedFareIndex >= route.opts.length) focusedFareIndex = 0;
+    var seedBase = seedFromString([origin.code, dest.code].sort().join('-') + '-via');
+
+    // Draw the dimmed (non-selected) fare paths first, the highlighted one
+    // last, so it always paints on top wherever routes cross.
+    var order = route.opts.map(function(o, i){ return i; })
+      .sort(function(a, b){ return (a === focusedFareIndex ? 1 : 0) - (b === focusedFareIndex ? 1 : 0); });
+
+    order.forEach(function(i){
+      var o = route.opts[i];
+      var active = i === focusedFareIndex;
+      var d;
+      if (o.stops === 0){
+        d = arcPath(op[0], op[1], pos[0], pos[1]);
+      } else {
+        var wp = connectionWaypoint(op, pos, seedBase, i);
+        d = 'M ' + op[0] + ' ' + op[1] + ' L ' + wp[0] + ' ' + wp[1] + ' L ' + pos[0] + ' ' + pos[1];
+        var wpDot = el('circle', {
+          cx:wp[0], cy:wp[1], r: zs(active ? 3 : 2.2),
+          fill: active ? 'var(--accent)' : 'var(--text-muted)',
+          opacity: active ? 1 : 0.5
+        });
+        routesG.appendChild(wpDot);
+      }
+      var path = el('path', {
+        d: d, fill:'none',
+        stroke: active ? 'var(--accent)' : 'var(--text-secondary)',
+        'stroke-width': zs(active ? 2.4 : 1.1),
+        'stroke-opacity': active ? 0.95 : 0.3,
+        style:'cursor:pointer'
+      });
+      path.addEventListener('click', function(){ if (!wasDragged()) selectFare(i); });
+      path.addEventListener('mouseenter', function(evt){
+        showTooltip(evt, '<div class="t-city">' + o.airline + '</div><div class="t-sub">' +
+          (o.stops === 0 ? 'Nonstop' : o.stops + ' stop') + ' · ' + fmtDuration(o.durationH) + ' · $' + o.price +
+          (active ? '' : ' · click to compare') + '</div>');
+      });
+      path.addEventListener('mousemove', function(evt){ showTooltip(evt, tooltip.innerHTML); });
+      path.addEventListener('mouseleave', hideTooltip);
+      routesG.appendChild(path);
+    });
+
+    var activeOpt = route.opts[focusedFareIndex];
+    var dot = el('circle', { cx:pos[0], cy:pos[1], r:zs(6.5), fill:'var(--accent)', stroke:'var(--surface-1)', 'stroke-width':zs(1.5) });
+    destG.appendChild(dot);
+
+    var ly = pos[1] - zs(11);
+    var text = dest.name + ' · $' + activeOpt.price;
+    var w = zs(8 + text.length * 4.6);
+    var bg = el('rect', { x:pos[0] - w/2, y:ly - zs(10), width:w, height:zs(15), rx:zs(7), fill:'var(--surface-1)', stroke:'var(--border)', 'stroke-width':zs(1) });
+    var lbl = el('text', { x:pos[0], y:ly + zs(1), 'text-anchor':'middle', 'font-size':zs(9.5), 'font-weight':600, fill:'var(--text-primary)' });
+    lbl.textContent = text;
+    labelsG.appendChild(bg);
+    labelsG.appendChild(lbl);
+
+    drawOrigin(origin, op);
+  }
+
+  function drawOrigin(origin, op){
+    var ring = el('circle', { cx:op[0], cy:op[1], r:zs(6), fill:'none', stroke:'var(--accent-ring)', 'stroke-width':zs(6) });
+    var core = el('circle', { cx:op[0], cy:op[1], r:zs(5), fill:'var(--accent)', stroke:'var(--surface-1)', 'stroke-width':zs(1.5) });
+    originG.appendChild(ring); originG.appendChild(core);
+    var w = zs(10 + origin.name.length*4.8);
+    var oLabelBg = el('rect', { x:op[0] - w/2, y:op[1]-zs(26), width:w, height:zs(16), rx:zs(8), fill:'var(--accent)' });
+    var oLabel = el('text', { x:op[0], y:op[1]-zs(14.5), 'text-anchor':'middle', 'font-size':zs(10), 'font-weight':700, fill:'#fff' });
+    oLabel.textContent = origin.name;
+    originG.appendChild(oLabelBg); originG.appendChild(oLabel);
+  }
+
+  // ---------- destination selection ----------
+  var chipsEl = document.getElementById('chips');
+
+  // A big selection (e.g. after Select all) can grow the chip row tall
+  // enough to push the map down; let the user fold it to one line.
+  var chipsFoldBtn = document.getElementById('chipsFoldBtn');
+  var chipsCollapsed = false;
+  chipsFoldBtn.addEventListener('click', function(){
+    chipsCollapsed = !chipsCollapsed;
+    chipsEl.classList.toggle('collapsed', chipsCollapsed);
+    chipsFoldBtn.classList.toggle('collapsed', chipsCollapsed);
+    chipsFoldBtn.title = chipsCollapsed ? 'Expand destination list' : 'Collapse destination list';
+  });
+
+  function renderChips(){
+    if (destinations.length === 0){
+      chipsEl.innerHTML = '<span class="chips-empty">No destinations selected yet</span>';
+      return;
+    }
+    var origin = cityByCode(originCode);
+    chipsEl.innerHTML = '';
+    destinations.forEach(function(code){
+      var c = cityByCode(code);
+      if (!c) return;
+      var price = origin ? routeModel(origin, c).dotPrice : null;
+      var chip = document.createElement('span');
+      chip.className = 'chip';
+      chip.innerHTML = '<span>' + c.name + '</span>' +
+        (price ? '<span class="chip-price">from $' + price + '</span>' : '') +
+        '<button type="button" aria-label="Remove ' + c.name + '" data-code="' + code + '">✕</button>';
+      chipsEl.appendChild(chip);
+    });
+  }
+  chipsEl.addEventListener('click', function(e){
+    var btn = e.target.closest('button[data-code]');
+    if (!btn) return;
+    removeDestination(btn.getAttribute('data-code'));
+  });
+  // Removing/clearing destinations never touches zoom or the pan position —
+  // only additions (a new destination, a new origin) trigger the auto-fit.
+  document.getElementById('clearDestBtn').addEventListener('click', function(){
+    destinations = [];
+    renderChips();
+    renderRoutes();
+  });
+  document.getElementById('selectAllBtn').addEventListener('click', function(){
+    CITIES.forEach(function(c){
+      if (c.code !== originCode && destinations.indexOf(c.code) === -1) destinations.push(c.code);
+    });
+    renderChips();
+    autoFitZoom();
+    renderRoutes();
+    recenterView(true);
+  });
+
+  function addDestination(code){
+    if (!code || code === originCode) return;
+    if (destinations.indexOf(code) !== -1) return;
+    if (!cityByCode(code)) return;
+    destinations.push(code);
+    renderChips();
+    autoFitZoom();
+    renderRoutes();
+    recenterView(true);
+  }
+  function removeDestination(code){
+    var idx = destinations.indexOf(code);
+    if (idx === -1) return;
+    destinations.splice(idx, 1);
+    if (code === focusedCode){
+      focusedCode = null;
+      focusedFareIndex = 0;
+      drawer.classList.remove('open');
+    }
+    renderChips();
+    renderRoutes();
+  }
+
+  // Sets the departure city -- shared by the origin autocomplete's onSelect
+  // and by clicking a base-map dot while no origin is currently selected.
+  function selectOrigin(code){
+    var c = cityByCode(code);
+    if (!c) return;
+    originCode = c.code;
+    originInput.value = c.name + ' (' + c.code + ')';
+    // an origin can't also be a destination
+    if (destinations.indexOf(c.code) !== -1) removeDestination(c.code);
+    renderChips();
+    autoFitZoom();
+    renderRoutes();
+    recenterView(true);
+    updateOriginClearBtn();
+  }
+
+  // wire up base-map dot clicks (every tile copy of every city) now that
+  // addDestination/selectOrigin exist. When no departure city is selected
+  // yet, the first click on any city sets it as the origin instead of
+  // adding it as a destination.
+  Object.keys(cityDotEls).forEach(function(code){
+    cityDotEls[code].forEach(function(dot){
+      dot.addEventListener('click', function(){
+        if (wasDragged()) return;
+        if (originCode === null) selectOrigin(code);
+        else addDestination(code);
+      });
+      dot.addEventListener('mouseenter', function(evt){
+        var c = cityByCode(code);
+        var hint = originCode === null ? 'click to set as departure city' : 'click to add as a destination';
+        showTooltip(evt, '<div class="t-city">' + c.name + '</div><div class="t-sub">' + hint + '</div>');
+      });
+      dot.addEventListener('mousemove', function(evt){ showTooltip(evt, tooltip.innerHTML); });
+      dot.addEventListener('mouseleave', hideTooltip);
+    });
+  });
+
+  // ---------- pan / scroll / infinite wrap ----------
+  // Pointer capture is deferred until real movement is detected (past
+  // DRAG_THRESHOLD) rather than grabbed on every pointerdown — capturing
+  // eagerly retargets the eventual mouseup/click to the scroll container
+  // instead of whatever was actually clicked, which silently breaks clicks
+  // on city dots and destination markers.
+  var DRAG_THRESHOLD = 4;
+  var isDragging = false, dragStartX = 0, dragStartY = 0, dragStartLeft = 0, dragStartTop = 0, dragMoved = 0, dragCaptured = false;
+
+  function wasDragged(){ return dragMoved > DRAG_THRESHOLD; }
+
+  mapScroll.addEventListener('pointerdown', function(e){
+    isDragging = true; dragMoved = 0; dragCaptured = false;
+    dragStartX = e.clientX; dragStartY = e.clientY;
+    dragStartLeft = mapScroll.scrollLeft; dragStartTop = mapScroll.scrollTop;
+  });
+  mapScroll.addEventListener('pointermove', function(e){
+    if (!isDragging) return;
+    var dx = e.clientX - dragStartX, dy = e.clientY - dragStartY;
+    dragMoved = Math.max(dragMoved, Math.hypot(dx, dy));
+    if (!dragCaptured && dragMoved > DRAG_THRESHOLD){
+      dragCaptured = true;
+      mapScroll.classList.add('dragging');
+      try { mapScroll.setPointerCapture(e.pointerId); } catch (err) {}
+    }
+    if (dragCaptured){
+      mapScroll.scrollLeft = dragStartLeft - dx;
+      mapScroll.scrollTop = dragStartTop - dy;
+    }
+  });
+  function endDrag(e){
+    if (!isDragging) return;
+    isDragging = false;
+    mapScroll.classList.remove('dragging');
+    if (dragCaptured){
+      try { mapScroll.releasePointerCapture(e.pointerId); } catch (err) {}
+      dragCaptured = false;
+    }
+  }
+  mapScroll.addEventListener('pointerup', endDrag);
+  mapScroll.addEventListener('pointercancel', endDrag);
+
+  // Ctrl/Cmd+scroll (and trackpad pinch, which browsers report the same way)
+  // zooms; plain vertical wheel input pans horizontally instead (most desktop
+  // mice have no horizontal scroll wheel). Trackpad horizontal scroll keeps
+  // working natively since we only intercept the vertical case.
+  mapScroll.addEventListener('wheel', function(e){
+    if (e.ctrlKey || e.metaKey){
+      e.preventDefault();
+      setZoom(zoom * (e.deltaY < 0 ? 1.12 : 1 / 1.12), false);
+      return;
+    }
+    if (Math.abs(e.deltaY) > Math.abs(e.deltaX)){
+      mapScroll.scrollLeft += e.deltaY;
+      e.preventDefault();
+    }
+  }, { passive:false });
+
+  // Seamless infinite scroll: once the visible window nears the edge of the
+  // rendered tile range, silently jump back by whole tile-widths — since
+  // every tile is an identical copy of the world, the jump is invisible.
+  // Suppressed while a programmatic recenter/zoom is animating: a native
+  // smooth scrollTo() generates its own stream of intermediate 'scroll'
+  // events, and an instant mid-flight jump here fights with that animation
+  // (the browser keeps easing toward its original target from whatever
+  // position we just jumped to), landing the view somewhere wrong once it
+  // settles.
+  var wrapping = false, suppressWrap = false, suppressWrapTimer = null;
+  mapScroll.addEventListener('scrollend', function(){
+    suppressWrap = false;
+    clearTimeout(suppressWrapTimer);
+  });
+  mapScroll.addEventListener('scroll', function(){
+    if (wrapping || suppressWrap) return;
+    var tileWpx = TILE_W * pxPerUnit();
+    var sl = mapScroll.scrollLeft, vw = mapScroll.clientWidth;
+    wrapping = true;
+    if (sl < tileWpx * 0.5){
+      mapScroll.scrollLeft = sl + tileWpx * 2;
+    } else if (sl + vw > tileWpx * (TILE_COUNT - 0.5)){
+      mapScroll.scrollLeft = sl - tileWpx * 2;
+    }
+    wrapping = false;
+  });
+
+  // Logical-unit bounding box of the origin plus every currently-selected
+  // destination (each destination positioned via its shortest wrap-around
+  // direction from the origin, same as renderRoutes draws it). Shared by the
+  // auto-fit zoom calculation and the recenter/view-centering logic below.
+  function getSelectionExtent(){
+    var origin = cityByCode(originCode);
+    if (!origin) return null;
+    var op = projectTiled(origin.lat, origin.lon, ORIGIN_TILE);
+    var xs = [op[0]], ys = [op[1]];
+    destinations.forEach(function(code){
+      var c = cityByCode(code);
+      if (!c) return;
+      var dLon = shortestDeltaLon(origin.lon, c.lon);
+      var dx = op[0] + dLon / 360 * TILE_W;
+      var dy = project(c.lat, c.lon)[1];
+      xs.push(dx);
+      ys.push(dy);
+      // Each route arc bows upward (toward smaller y) by up to 70 units --
+      // include its peak so the fit accounts for the whole visible curve,
+      // not just the two endpoints it connects (mirrors arcPath()'s bow).
+      var dist = Math.hypot(dx - op[0], dy - op[1]);
+      var bow = Math.min(dist * 0.16, 70);
+      ys.push((op[1] + dy) / 2 - bow);
+    });
+    return {
+      op: op,
+      minX: Math.min.apply(null, xs), maxX: Math.max.apply(null, xs),
+      minY: Math.min.apply(null, ys), maxY: Math.max.apply(null, ys)
+    };
+  }
+
+  // Centers the view on the midpoint of the current selection's bounding box
+  // (just the origin when there are no destinations yet) — this keeps the
+  // departure city as close to center as possible while still guaranteeing
+  // every selected destination the auto-fit zoomed to fit is actually
+  // scrolled into view, rather than centering on the origin alone and
+  // leaving a lone destination hanging half off-screen.
+  function recenterView(smooth){
+    var ext = getSelectionExtent();
+    if (!ext) return;
+    var ppu = pxPerUnit();
+    var centerX = (ext.minX + ext.maxX) / 2;
+    var centerY = (ext.minY + ext.maxY) / 2;
+    var targetLeft = centerX * ppu - mapScroll.clientWidth / 2;
+    var maxLeft = TILE_COUNT * TILE_W * ppu - mapScroll.clientWidth;
+    targetLeft = Math.max(0, Math.min(maxLeft, targetLeft));
+    // Center vertically within the area above the floating legend/zoom
+    // controls strip, not the full scroll height, so a centered route
+    // doesn't end up partly hidden behind that overlay.
+    var safeH = Math.max(120, mapScroll.clientHeight - FIT_BOTTOM_SAFE_PX);
+    var targetTop = centerY * ppu - safeH / 2;
+    var maxTop = Math.max(0, TILE_H * ppu - mapScroll.clientHeight);
+    targetTop = Math.max(0, Math.min(maxTop, targetTop));
+    if (smooth){
+      suppressWrap = true;
+      clearTimeout(suppressWrapTimer);
+      suppressWrapTimer = setTimeout(function(){ suppressWrap = false; }, 500);
+    }
+    mapScroll.scrollTo({ left: targetLeft, top: targetTop, behavior: smooth ? 'smooth' : 'auto' });
+  }
+  document.getElementById('recenterBtn').addEventListener('click', function(){
+    recenterView(true);
+  });
+
+  // Manual zoom in/out, clamped to [MIN_ZOOM, MAX_ZOOM]. `smooth` controls the
+  // recenter animation — off for continuous wheel-zoom so it feels responsive,
+  // on for a single button press.
+  function setZoom(z, smooth){
+    zoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, z));
+    layoutMap();
+    updateStaticSizes();
+    renderRoutes();
+    recenterView(smooth);
+  }
+  document.getElementById('zoomInBtn').addEventListener('click', function(){ setZoom(zoom * 1.4, true); });
+  document.getElementById('zoomOutBtn').addEventListener('click', function(){ setZoom(zoom / 1.4, true); });
+
+  // Auto-fit: size the view so the full span of the current selection
+  // (origin to its farthest destination, in either direction) fills
+  // FIT_FRACTION of the viewport width — i.e. zoom in for a short hop, zoom
+  // back out again if a farther destination gets added. Only ever called
+  // after an addition (new origin or new destination); removals leave the
+  // zoom exactly where it was.
+  function autoFitZoom(){
+    if (destinations.length === 0) return;
+    var ext = getSelectionExtent();
+    if (!ext) return;
+    var spanX = Math.max(4, ext.maxX - ext.minX);
+    var spanY = Math.max(4, ext.maxY - ext.minY);
+    var viewportW = mapScroll.clientWidth || mapWrap.clientWidth || 800;
+    var viewportH = mapScroll.clientHeight || mapWrap.clientHeight || 500;
+    // Reserve room for the constant-pixel-size label pills and the floating
+    // legend/zoom-control overlays, then fit BOTH axes -- not width alone --
+    // so a north-south-heavy selection can't end up taller than the
+    // viewport even though it fits the width fine.
+    var availW = Math.max(120, viewportW - 2 * FIT_LABEL_MARGIN_PX);
+    var availH = Math.max(120, viewportH - FIT_LABEL_MARGIN_PX - FIT_BOTTOM_SAFE_PX);
+    var zoomForWidth = (FIT_FRACTION * availW) / (spanX * baseUnit());
+    var zoomForHeight = (FIT_FRACTION * availH) / (spanY * baseUnit());
+    var desired = Math.min(zoomForWidth, zoomForHeight);
+    zoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, desired));
+    layoutMap();
+    updateStaticSizes();
+  }
+
+  var resizeTimer = null;
+  window.addEventListener('resize', function(){
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(function(){ layoutMap(); recenterView(false); }, 120);
+  });
+
+  // ---------- generic autocomplete wiring ----------
+  function wireAutocomplete(inputEl, dropdownEl, opts){
+    var activeIndex = -1;
+    var matches = [];
+
+    function render(query){
+      var q = query.trim().toLowerCase();
+      matches = CITIES.filter(function(c){
+        if (opts.exclude && opts.exclude(c.code)) return false;
+        return !q || c.name.toLowerCase().indexOf(q) !== -1 ||
+               c.code.toLowerCase().indexOf(q) !== -1 ||
+               c.country.toLowerCase().indexOf(q) !== -1;
+      }).slice(0, 12);
+      activeIndex = -1;
+      if (matches.length === 0){
+        dropdownEl.innerHTML = '<div class="dropdown-empty">No matching city</div>';
+      } else {
+        dropdownEl.innerHTML = matches.map(function(c, i){
+          return '<div class="dropdown-item" data-code="' + c.code + '" data-idx="' + i + '">' +
+            '<span>' + c.name + '</span><span class="muted">' + c.code + ' · ' + c.country + '</span></div>';
+        }).join('');
+      }
+      dropdownEl.classList.add('open');
+    }
+    function close(){ dropdownEl.classList.remove('open'); }
+    function pick(c){
+      opts.onSelect(c);
+      close();
+    }
+
+    inputEl.addEventListener('focus', function(){ render(inputEl.value); });
+    inputEl.addEventListener('input', function(){ render(inputEl.value); });
+    inputEl.addEventListener('keydown', function(e){
+      if (!dropdownEl.classList.contains('open')) return;
+      var items = dropdownEl.querySelectorAll('.dropdown-item');
+      if (e.key === 'ArrowDown'){ e.preventDefault(); activeIndex = Math.min(activeIndex+1, items.length-1); }
+      else if (e.key === 'ArrowUp'){ e.preventDefault(); activeIndex = Math.max(activeIndex-1, 0); }
+      else if (e.key === 'Enter'){
+        e.preventDefault();
+        var idx = activeIndex >= 0 ? activeIndex : 0;
+        if (matches[idx]) pick(matches[idx]);
+        return;
+      } else if (e.key === 'Escape'){ close(); return; }
+      else return;
+      items.forEach(function(node, i){ node.classList.toggle('active', i === activeIndex); });
+    });
+    dropdownEl.addEventListener('click', function(e){
+      var item = e.target.closest('.dropdown-item');
+      if (!item) return;
+      var c = cityByCode(item.getAttribute('data-code'));
+      if (c) pick(c);
+    });
+    document.addEventListener('click', function(e){
+      if (!inputEl.parentElement.contains(e.target)) close();
+    });
+  }
+
+  var originInput = document.getElementById('originInput');
+  var originClearBtn = document.getElementById('originClearBtn');
+  function updateOriginClearBtn(){
+    originClearBtn.classList.toggle('visible', !!originInput.value);
+  }
+  originInput.addEventListener('input', updateOriginClearBtn);
+  originClearBtn.addEventListener('click', function(){
+    originInput.value = '';
+    originCode = null;
+    // no valid departure city means no route can be drawn -- clear any
+    // destinations too rather than leaving orphaned, unroutable chips.
+    destinations = [];
+    renderChips();
+    renderRoutes();
+    updateOriginClearBtn();
+    originInput.focus();
+  });
+
+  wireAutocomplete(originInput, document.getElementById('originDropdown'), {
+    onSelect: function(c){ selectOrigin(c.code); }
+  });
+
+  var destInput = document.getElementById('destInput');
+  wireAutocomplete(destInput, document.getElementById('destDropdown'), {
+    exclude: function(code){ return code === originCode || destinations.indexOf(code) !== -1; },
+    onSelect: function(c){
+      addDestination(c.code);
+      destInput.value = '';
+      destInput.focus();
+    }
+  });
+
+  // ---------- light/dark toggle ----------
+  // No persistence (this page may render inline in a chat), just an explicit
+  // override of whatever the system currently prefers. Destination-marker
+  // colors are baked into `fill` at render time via priceColor(), so those
+  // need a re-render on toggle; land/city dots reference var(--land) etc.
+  // directly and repaint on their own when the custom properties change.
+  var themeToggleBtn = document.getElementById('themeToggleBtn');
+  function currentTheme(){
+    var attr = document.documentElement.getAttribute('data-theme');
+    if (attr) return attr;
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  }
+  function setTheme(t){
+    document.documentElement.setAttribute('data-theme', t);
+    themeToggleBtn.textContent = t === 'dark' ? '☀️' : '🌙';
+    themeToggleBtn.title = t === 'dark' ? 'Switch to light mode' : 'Switch to dark mode';
+    renderRoutes();
+  }
+  themeToggleBtn.addEventListener('click', function(){
+    setTheme(currentTheme() === 'dark' ? 'light' : 'dark');
+  });
+  themeToggleBtn.textContent = currentTheme() === 'dark' ? '☀️' : '🌙';
+
+  // ---------- date picker (foldable calendar + one-way/round-trip) ----------
+  // Purely a UI affordance for this demo -- selected dates aren't wired into
+  // the mock fare model, they just drive the toggle button's label.
+  var dateToggleBtn = document.getElementById('dateToggleBtn');
+  var dateToggleLabel = document.getElementById('dateToggleLabel');
+  var datePanel = document.getElementById('datePanel');
+  var calTitle = document.getElementById('calTitle');
+  var calGrid = document.getElementById('calGrid');
+
+  var tripMode = 'oneway';
+  var departDate = null, returnDate = null;
+  var today = new Date(); today.setHours(0, 0, 0, 0);
+  var calViewYear = today.getFullYear(), calViewMonth = today.getMonth();
+  var MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+  function dateKey(d){ return d.getFullYear() + '-' + d.getMonth() + '-' + d.getDate(); }
+  function fmtDateShort(d){ return MONTH_NAMES[d.getMonth()].slice(0, 3) + ' ' + d.getDate(); }
+
+  function updateDateToggleLabel(){
+    if (!departDate){ dateToggleLabel.textContent = 'Add dates'; return; }
+    if (tripMode === 'oneway'){ dateToggleLabel.textContent = fmtDateShort(departDate); return; }
+    dateToggleLabel.textContent = fmtDateShort(departDate) + ' – ' + (returnDate ? fmtDateShort(returnDate) : 'return?');
+  }
+
+  function renderCalendar(){
+    calTitle.textContent = MONTH_NAMES[calViewMonth] + ' ' + calViewYear;
+    clear(calGrid);
+    var firstDow = new Date(calViewYear, calViewMonth, 1).getDay();
+    var totalDays = new Date(calViewYear, calViewMonth + 1, 0).getDate();
+    var prevMonthDays = new Date(calViewYear, calViewMonth, 0).getDate();
+    var totalCells = Math.ceil((firstDow + totalDays) / 7) * 7;
+    var frag = document.createDocumentFragment();
+    for (var i = 0; i < totalCells; i++){
+      var dayNum = i - firstDow + 1;
+      var cellDate, outside = false;
+      if (dayNum < 1){ cellDate = new Date(calViewYear, calViewMonth - 1, prevMonthDays + dayNum); outside = true; }
+      else if (dayNum > totalDays){ cellDate = new Date(calViewYear, calViewMonth + 1, dayNum - totalDays); outside = true; }
+      else { cellDate = new Date(calViewYear, calViewMonth, dayNum); }
+      cellDate.setHours(0, 0, 0, 0);
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'cal-day';
+      btn.textContent = cellDate.getDate();
+      if (outside) btn.classList.add('outside');
+      if (cellDate < today) btn.classList.add('past');
+      if (dateKey(cellDate) === dateKey(today)) btn.classList.add('today');
+      if (departDate && dateKey(cellDate) === dateKey(departDate)) btn.classList.add('selected');
+      if (returnDate && dateKey(cellDate) === dateKey(returnDate)) btn.classList.add('selected');
+      if (departDate && returnDate && cellDate > departDate && cellDate < returnDate) btn.classList.add('in-range');
+      (function(cd){ btn.addEventListener('click', function(){ pickDate(cd); }); })(cellDate);
+      frag.appendChild(btn);
+    }
+    calGrid.appendChild(frag);
+  }
+
+  function pickDate(d){
+    if (d < today) return;
+    if (tripMode === 'oneway'){
+      departDate = d; returnDate = null;
+      updateDateToggleLabel(); renderCalendar();
+      closeDatePanel();
+      return;
+    }
+    // round trip: first click sets depart, second click (on/after depart) sets
+    // return; clicking again once both are set starts a fresh selection.
+    if (!departDate || returnDate){
+      departDate = d; returnDate = null;
+    } else if (d < departDate){
+      departDate = d;
+    } else {
+      returnDate = d;
+    }
+    updateDateToggleLabel(); renderCalendar();
+    if (departDate && returnDate) closeDatePanel();
+  }
+
+  function openDatePanel(){
+    datePanel.classList.add('open');
+    calViewYear = (departDate || today).getFullYear();
+    calViewMonth = (departDate || today).getMonth();
+    renderCalendar();
+  }
+  function closeDatePanel(){ datePanel.classList.remove('open'); }
+
+  dateToggleBtn.addEventListener('click', function(e){
+    e.stopPropagation();
+    if (datePanel.classList.contains('open')) closeDatePanel();
+    else openDatePanel();
+  });
+  datePanel.addEventListener('click', function(e){ e.stopPropagation(); });
+  document.addEventListener('click', function(e){
+    if (!dateToggleBtn.parentElement.contains(e.target)) closeDatePanel();
+  });
+
+  document.getElementById('calPrevBtn').addEventListener('click', function(){
+    calViewMonth--; if (calViewMonth < 0){ calViewMonth = 11; calViewYear--; }
+    renderCalendar();
+  });
+  document.getElementById('calNextBtn').addEventListener('click', function(){
+    calViewMonth++; if (calViewMonth > 11){ calViewMonth = 0; calViewYear++; }
+    renderCalendar();
+  });
+
+  document.querySelectorAll('.trip-opt').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      var mode = btn.getAttribute('data-mode');
+      if (mode === tripMode) return;
+      tripMode = mode;
+      document.querySelectorAll('.trip-opt').forEach(function(b){ b.classList.toggle('active', b === btn); });
+      if (tripMode === 'oneway') returnDate = null;
+      updateDateToggleLabel();
+      renderCalendar();
+    });
+  });
+
+  document.getElementById('dateClearBtn').addEventListener('click', function(){
+    departDate = null; returnDate = null;
+    updateDateToggleLabel();
+    renderCalendar();
+  });
+
+  updateDateToggleLabel();
+
+  // ---------- init ----------
+  var defaultOrigin = cityByCode(originCode);
+  originInput.value = defaultOrigin.name + ' (' + defaultOrigin.code + ')';
+  updateOriginClearBtn();
+  layoutMap();
+  autoFitZoom();
+  renderChips();
+  renderRoutes();
+  recenterView(false);
+})();
+</script>
+</body>
+</html>
